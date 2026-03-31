@@ -25,16 +25,38 @@ if ($axiosCheck) {
 # --- Check 2: Lockfile ---
 Write-Host ""
 Write-Host "[2/5] Checking lockfile..." -ForegroundColor Yellow
-if (Test-Path "package-lock.json") {
-    $lockHit = Select-String -Path "package-lock.json" -Pattern "1\.14\.1|0\.30\.4|plain-crypto-js"
-    if ($lockHit) {
-        Write-Host "  !! AFFECTED: Compromised reference in lockfile" -ForegroundColor Red
-        $found = $true
-    } else {
-        Write-Host "  OK: Lockfile clean" -ForegroundColor Green
+$lockfiles = @("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "deno.lock")
+$lockfileFound = $false
+foreach ($lf in $lockfiles) {
+    if (Test-Path $lf) {
+        $lockfileFound = $true
+        $lockHit = Select-String -Path $lf -Pattern "1\.14\.1|0\.30\.4|plain-crypto-js"
+        if ($lockHit) {
+            Write-Host "  !! AFFECTED: Compromised reference in $lf" -ForegroundColor Red
+            $found = $true
+        } else {
+            Write-Host "  OK: $lf clean" -ForegroundColor Green
+        }
     }
-} else {
-    Write-Host "  SKIP: No package-lock.json found"
+}
+if (Test-Path "bun.lockb") {
+    $lockfileFound = $true
+    $bunCmd = Get-Command bun -ErrorAction SilentlyContinue
+    if ($bunCmd) {
+        $bunText = & bun bun.lockb 2>$null
+        $lockHit = $bunText | Select-String "1\.14\.1|0\.30\.4|plain-crypto-js"
+        if ($lockHit) {
+            Write-Host "  !! AFFECTED: Compromised reference in bun.lockb" -ForegroundColor Red
+            $found = $true
+        } else {
+            Write-Host "  OK: bun.lockb clean" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  WARN: bun.lockb found but 'bun' not installed — cannot decode binary lockfile, skipping" -ForegroundColor Yellow
+    }
+}
+if (-not $lockfileFound) {
+    Write-Host "  SKIP: No lockfile found"
 }
 
 # --- Check 3: Malicious dependency ---
