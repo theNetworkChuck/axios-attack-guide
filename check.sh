@@ -33,25 +33,71 @@ fi
 echo ""
 echo "[2/6] Checking lockfile for compromised versions..."
 LOCKFILE_FOUND=0
-for LOCKFILE in package-lock.json yarn.lock pnpm-lock.yaml deno.lock; do
-  if [ -f "$LOCKFILE" ]; then
-    LOCKFILE_FOUND=1
-    LOCK_HIT=$(grep -E "1\.14\.1|0\.30\.4" "$LOCKFILE" | head -3)
-    if [ -n "$LOCK_HIT" ]; then
-      echo "  !! AFFECTED: Compromised version found in $LOCKFILE"
-      echo "  $LOCK_HIT"
-      FOUND=1
-    else
-      echo "  OK: $LOCKFILE clean"
-    fi
+
+# Helper: check decoded yarn-style content for axios specifically
+# Finds blocks whose header starts with "axios@" and checks the resolved version
+check_axios_yarn_format() {
+  awk '/^axios@/{p=1} p && /  version "(1\.14\.1|0\.30\.4)"/{print; p=0} /^[^ \t]/{p=0}' "$1"
+}
+
+if [ -f "package-lock.json" ]; then
+  LOCKFILE_FOUND=1
+  # Scope to the axios entry in node_modules, not any package with that version number
+  LOCK_HIT=$(grep -A 3 '"node_modules/axios"' package-lock.json | grep -E '"(1\.14\.1|0\.30\.4)"' | head -3)
+  if [ -n "$LOCK_HIT" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in package-lock.json"
+    echo "  $LOCK_HIT"
+    FOUND=1
+  else
+    echo "  OK: package-lock.json clean"
   fi
-done
+fi
+
+if [ -f "yarn.lock" ]; then
+  LOCKFILE_FOUND=1
+  LOCK_HIT=$(check_axios_yarn_format yarn.lock)
+  if [ -n "$LOCK_HIT" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in yarn.lock"
+    echo "  $LOCK_HIT"
+    FOUND=1
+  else
+    echo "  OK: yarn.lock clean"
+  fi
+fi
+
+if [ -f "pnpm-lock.yaml" ]; then
+  LOCKFILE_FOUND=1
+  # pnpm entries are keyed as "/axios@VERSION:" or "axios@VERSION:"
+  LOCK_HIT=$(grep -E "(^|/)(axios)@(1\.14\.1|0\.30\.4):" pnpm-lock.yaml | head -3)
+  if [ -n "$LOCK_HIT" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in pnpm-lock.yaml"
+    echo "  $LOCK_HIT"
+    FOUND=1
+  else
+    echo "  OK: pnpm-lock.yaml clean"
+  fi
+fi
+
+if [ -f "deno.lock" ]; then
+  LOCKFILE_FOUND=1
+  # deno.lock is JSON; npm entries are keyed as "axios@VERSION"
+  LOCK_HIT=$(grep -E '"axios@(1\.14\.1|0\.30\.4)"' deno.lock | head -3)
+  if [ -n "$LOCK_HIT" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in deno.lock"
+    echo "  $LOCK_HIT"
+    FOUND=1
+  else
+    echo "  OK: deno.lock clean"
+  fi
+fi
+
 if [ -f "bun.lockb" ]; then
   LOCKFILE_FOUND=1
   if command -v bun &> /dev/null; then
-    LOCK_HIT=$(bun bun.lockb 2>/dev/null | grep -E "1\.14\.1|0\.30\.4" | head -3)
+    # bun.lockb is binary — decode to yarn-style text first, then scope to axios blocks
+    LOCK_HIT=$(bun bun.lockb 2>/dev/null | check_axios_yarn_format /dev/stdin)
     if [ -n "$LOCK_HIT" ]; then
-      echo "  !! AFFECTED: Compromised version found in bun.lockb"
+      echo "  !! AFFECTED: Compromised axios version found in bun.lockb"
       echo "  $LOCK_HIT"
       FOUND=1
     else
@@ -61,6 +107,7 @@ if [ -f "bun.lockb" ]; then
     echo "  WARN: bun.lockb found but 'bun' not installed — cannot decode binary lockfile, skipping"
   fi
 fi
+
 if [ $LOCKFILE_FOUND -eq 0 ]; then
   echo "  SKIP: No lockfile found in current directory"
 fi

@@ -25,28 +25,80 @@ if ($axiosCheck) {
 # --- Check 2: Lockfile ---
 Write-Host ""
 Write-Host "[2/5] Checking lockfile..." -ForegroundColor Yellow
-$lockfiles = @("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "deno.lock")
 $lockfileFound = $false
-foreach ($lf in $lockfiles) {
-    if (Test-Path $lf) {
-        $lockfileFound = $true
-        $lockHit = Select-String -Path $lf -Pattern "1\.14\.1|0\.30\.4|plain-crypto-js"
-        if ($lockHit) {
-            Write-Host "  !! AFFECTED: Compromised reference in $lf" -ForegroundColor Red
-            $found = $true
-        } else {
-            Write-Host "  OK: $lf clean" -ForegroundColor Green
-        }
+
+# Helper: find compromised axios version in decoded yarn-style text
+function Find-AxiosInYarnFormat($lines) {
+    $inAxios = $false
+    foreach ($line in $lines) {
+        if ($line -match '^axios@') { $inAxios = $true; continue }
+        if ($line -match '^[^ \t]') { $inAxios = $false }
+        if ($inAxios -and $line -match 'version "(1\.14\.1|0\.30\.4)"') { return $line }
+    }
+    return $null
+}
+
+if (Test-Path "package-lock.json") {
+    $lockfileFound = $true
+    # Scope to the axios entry specifically, not any package with that version number
+    $content = Get-Content "package-lock.json"
+    $axiosIdx = ($content | Select-String -Pattern '"node_modules/axios"').LineNumber
+    if ($axiosIdx) {
+        $block = $content[($axiosIdx)..([math]::Min($axiosIdx+3, $content.Count-1))]
+        $lockHit = $block | Select-String -Pattern '"(1\.14\.1|0\.30\.4)"'
+    }
+    if ($lockHit) {
+        Write-Host "  !! AFFECTED: Compromised axios version found in package-lock.json" -ForegroundColor Red
+        $found = $true
+    } else {
+        Write-Host "  OK: package-lock.json clean" -ForegroundColor Green
     }
 }
+
+if (Test-Path "yarn.lock") {
+    $lockfileFound = $true
+    $lockHit = Find-AxiosInYarnFormat (Get-Content "yarn.lock")
+    if ($lockHit) {
+        Write-Host "  !! AFFECTED: Compromised axios version found in yarn.lock" -ForegroundColor Red
+        $found = $true
+    } else {
+        Write-Host "  OK: yarn.lock clean" -ForegroundColor Green
+    }
+}
+
+if (Test-Path "pnpm-lock.yaml") {
+    $lockfileFound = $true
+    # pnpm entries are keyed as "/axios@VERSION:" or "axios@VERSION:"
+    $lockHit = Select-String -Path "pnpm-lock.yaml" -Pattern "(^|/)axios@(1\.14\.1|0\.30\.4):"
+    if ($lockHit) {
+        Write-Host "  !! AFFECTED: Compromised axios version found in pnpm-lock.yaml" -ForegroundColor Red
+        $found = $true
+    } else {
+        Write-Host "  OK: pnpm-lock.yaml clean" -ForegroundColor Green
+    }
+}
+
+if (Test-Path "deno.lock") {
+    $lockfileFound = $true
+    # deno.lock is JSON; npm entries are keyed as "axios@VERSION"
+    $lockHit = Select-String -Path "deno.lock" -Pattern '"axios@(1\.14\.1|0\.30\.4)"'
+    if ($lockHit) {
+        Write-Host "  !! AFFECTED: Compromised axios version found in deno.lock" -ForegroundColor Red
+        $found = $true
+    } else {
+        Write-Host "  OK: deno.lock clean" -ForegroundColor Green
+    }
+}
+
 if (Test-Path "bun.lockb") {
     $lockfileFound = $true
     $bunCmd = Get-Command bun -ErrorAction SilentlyContinue
     if ($bunCmd) {
-        $bunText = & bun bun.lockb 2>$null
-        $lockHit = $bunText | Select-String "1\.14\.1|0\.30\.4|plain-crypto-js"
+        # bun.lockb is binary — decode to yarn-style text first, then scope to axios blocks
+        $bunLines = & bun bun.lockb 2>$null
+        $lockHit = Find-AxiosInYarnFormat $bunLines
         if ($lockHit) {
-            Write-Host "  !! AFFECTED: Compromised reference in bun.lockb" -ForegroundColor Red
+            Write-Host "  !! AFFECTED: Compromised axios version found in bun.lockb" -ForegroundColor Red
             $found = $true
         } else {
             Write-Host "  OK: bun.lockb clean" -ForegroundColor Green
@@ -55,6 +107,7 @@ if (Test-Path "bun.lockb") {
         Write-Host "  WARN: bun.lockb found but 'bun' not installed — cannot decode binary lockfile, skipping" -ForegroundColor Yellow
     }
 }
+
 if (-not $lockfileFound) {
     Write-Host "  SKIP: No lockfile found"
 }
