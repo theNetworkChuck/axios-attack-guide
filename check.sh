@@ -20,8 +20,9 @@ FOUND=0
 # --- Check 1: Installed axios version in entire dependency tree ---
 echo "[1/6] Checking axios versions in entire dependency tree..."
 if command -v npm &> /dev/null; then
-  # Get all axios instances from npm list (including transitive dependencies)
-  AXIOS_INSTANCES=$(npm list axios --all 2>/dev/null | grep "axios@")
+  # Get full tree output so parent packages are visible
+  AXIOS_TREE=$(npm list axios --all 2>/dev/null)
+  AXIOS_INSTANCES=$(echo "$AXIOS_TREE" | grep "axios@")
 
   if [ -n "$AXIOS_INSTANCES" ]; then
     # Check if any of them are compromised versions
@@ -29,12 +30,12 @@ if command -v npm &> /dev/null; then
 
     if [ -n "$COMPROMISED" ]; then
       echo "  !! AFFECTED: Compromised axios version found in dependency tree"
-      echo "$COMPROMISED"
+      echo "$AXIOS_TREE" | sed 's/^/    /'
       FOUND=1
     else
       echo "  OK: No compromised axios version in dependency tree"
-      echo "  Found versions:"
-      echo "$AXIOS_INSTANCES" | sed 's/^/    /'
+      echo "  Found versions (showing parent dependencies):"
+      echo "$AXIOS_TREE" | sed 's/^/    /'
     fi
   else
     echo "  OK: axios not found in dependencies"
