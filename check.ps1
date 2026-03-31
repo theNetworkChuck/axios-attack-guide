@@ -26,9 +26,28 @@ if ($axiosCheck) {
 Write-Host ""
 Write-Host "[2/5] Checking lockfile..." -ForegroundColor Yellow
 if (Test-Path "package-lock.json") {
-    $lockHit = Select-String -Path "package-lock.json" -Pattern "1\.14\.1|0\.30\.4|plain-crypto-js"
-    if ($lockHit) {
-        Write-Host "  !! AFFECTED: Compromised reference in lockfile" -ForegroundColor Red
+    $lockContent = Get-Content "package-lock.json" -Raw
+
+    # Check for malicious dependency name
+    $hasMaliciousDep = $lockContent -match "plain-crypto-js"
+
+    # Check for axios specifically at compromised versions
+    $hasCompromisedAxios = [regex]::IsMatch(
+        $lockContent,
+        '"node_modules/axios":\s*\{[^}]*?"version":\s*"(1\.14\.1|0\.30\.4)"'
+    )
+
+    # Also check lockfile v1 format
+    if (-not $hasCompromisedAxios) {
+        $hasCompromisedAxios = [regex]::IsMatch(
+            $lockContent,
+            '"axios":\s*\{\s*"version":\s*"(1\.14\.1|0\.30\.4)"'
+        )
+    }
+
+    if ($hasMaliciousDep -or $hasCompromisedAxios) {
+        if ($hasMaliciousDep) { Write-Host "  !! AFFECTED: plain-crypto-js in lockfile" -ForegroundColor Red }
+        if ($hasCompromisedAxios) { Write-Host "  !! AFFECTED: Compromised axios version in lockfile" -ForegroundColor Red }
         $found = $true
     } else {
         Write-Host "  OK: Lockfile clean" -ForegroundColor Green
