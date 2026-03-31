@@ -25,17 +25,17 @@ npm list -g axios
 
 **Mac/Linux:**
 ```bash
-curl -sL https://raw.githubusercontent.com/networkchuck/axios-attack-guide/main/check.sh | bash
+curl -sL https://raw.githubusercontent.com/thenetworkchuck/axios-attack-guide/main/check.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/networkchuck/axios-attack-guide/main/check.ps1 | iex
+irm https://raw.githubusercontent.com/thenetworkchuck/axios-attack-guide/main/check.ps1 | iex
 ```
 
 Or clone and run locally:
 ```bash
-git clone https://github.com/networkchuck/axios-attack-guide.git
+git clone https://github.com/thenetworkchuck/axios-attack-guide.git
 cd axios-attack-guide
 ./check.sh        # Mac/Linux
 .\check.ps1       # Windows PowerShell
