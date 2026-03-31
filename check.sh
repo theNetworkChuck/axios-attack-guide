@@ -5,6 +5,8 @@
 # Checks if your system was affected by the axios@1.14.1 / axios@0.30.4
 # supply chain attack that dropped a cross-platform RAT via plain-crypto-js.
 #
+# FIXED: Now checks axios versions across entire dependency tree
+#
 # Source: StepSecurity, Socket.dev, GitHub Issue #10604
 # ============================================================================
 
@@ -15,39 +17,54 @@ echo ""
 
 FOUND=0
 
-# --- Check 1: Installed axios version ---
-echo "[1/6] Checking installed axios version..."
+# --- Check 1: Installed axios version in entire dependency tree ---
+echo "[1/6] Checking axios versions in entire dependency tree..."
 if command -v npm &> /dev/null; then
-  AXIOS_VER=$(npm list axios 2>/dev/null | grep -oE "1\.14\.1|0\.30\.4")
-  if [ -n "$AXIOS_VER" ]; then
-    echo "  !! AFFECTED: axios@${AXIOS_VER} found in node_modules"
-    FOUND=1
+  # Get all axios instances from npm list (including transitive dependencies)
+  AXIOS_INSTANCES=$(npm list axios --all 2>/dev/null | grep "axios@")
+
+  if [ -n "$AXIOS_INSTANCES" ]; then
+    # Check if any of them are compromised versions
+    COMPROMISED=$(echo "$AXIOS_INSTANCES" | grep -E "axios@1\.14\.1|axios@0\.30\.4")
+
+    if [ -n "$COMPROMISED" ]; then
+      echo "  !! AFFECTED: Compromised axios version found in dependency tree"
+      echo "$COMPROMISED"
+      FOUND=1
+    else
+      echo "  OK: No compromised axios version in dependency tree"
+      echo "  Found versions:"
+      echo "$AXIOS_INSTANCES" | sed 's/^/    /'
+    fi
   else
-    echo "  OK: No compromised axios version installed"
+    echo "  OK: axios not found in dependencies"
   fi
 else
   echo "  SKIP: npm not found"
 fi
 
-# --- Check 2: Lockfile contains compromised version ---
+# --- Check 2: Parse package-lock.json for axios specifically ---
 echo ""
-echo "[2/6] Checking lockfile for compromised versions..."
+echo "[2/6] Checking package-lock.json for axios-specific entries..."
 if [ -f "package-lock.json" ]; then
-  LOCK_HIT=$(grep -E "1\.14\.1|0\.30\.4" package-lock.json | head -3)
-  if [ -n "$LOCK_HIT" ]; then
-    echo "  !! AFFECTED: Compromised version found in package-lock.json"
-    echo "  $LOCK_HIT"
+  # Look for axios package entries specifically (not just version numbers)
+  AXIOS_LOCK=$(grep -A 3 '"axios":' package-lock.json | grep -E '"version":\s*"(1\.14\.1|0\.30\.4)"')
+
+  if [ -n "$AXIOS_LOCK" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in package-lock.json"
+    echo "$AXIOS_LOCK"
     FOUND=1
   else
-    echo "  OK: Lockfile clean"
+    echo "  OK: No compromised axios in lockfile"
   fi
 elif [ -f "yarn.lock" ]; then
-  LOCK_HIT=$(grep -E "1\.14\.1|0\.30\.4" yarn.lock | head -3)
-  if [ -n "$LOCK_HIT" ]; then
-    echo "  !! AFFECTED: Compromised version found in yarn.lock"
+  AXIOS_LOCK=$(grep -A 1 "^axios@" yarn.lock | grep -E "version (1\.14\.1|0\.30\.4)")
+  if [ -n "$AXIOS_LOCK" ]; then
+    echo "  !! AFFECTED: Compromised axios version found in yarn.lock"
+    echo "$AXIOS_LOCK"
     FOUND=1
   else
-    echo "  OK: Lockfile clean"
+    echo "  OK: No compromised axios in yarn.lock"
   fi
 else
   echo "  SKIP: No lockfile found in current directory"
