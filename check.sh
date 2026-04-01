@@ -146,5 +146,6 @@ else
   echo "  - Use npm ci (not npm install) in CI/CD"
   echo "  - Set ignore-scripts=true in .npmrc"
   echo "  - Run: npm config set min-release-age 3"
+  echo "  - Whitelist permissions for the NPM package example axios must do only http & https & dns & domain lookup only requests, nothing more than that, Via using advanced policies like on ThreatLocker."
 fi
 echo "============================================"
