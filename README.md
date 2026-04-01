@@ -35,7 +35,7 @@ irm https://github.com/theNetworkChuck/axios-attack-guide/raw/refs/heads/main/ch
 
 Or clone and run locally:
 ```bash
-git clone https://github.com/networkchuck/axios-attack-guide.git
+git clone https://github.com/theNetworkChuck/axios-attack-guide.git
 cd axios-attack-guide
 ./check.sh        # Mac/Linux
 .\check.ps1       # Windows PowerShell
